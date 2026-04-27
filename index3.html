@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Math Galaxy: Evolution</title>
+    <style>
+        :root { --neon: #00fff2; --pink: #ff0077; --bg: #020205; }
+        body {
+            margin: 0; background: var(--bg); color: #fff;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100vh; overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            touch-action: none; /* Evita zoom accidental en móvil */
+        }
+        /* Menú Superior Estilo Cristal */
+        .menu {
+            display: flex; gap: 10px; margin-bottom: 20px;
+            background: rgba(255,255,255,0.05); padding: 12px;
+            border-radius: 40px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 100; flex-wrap: wrap; justify-content: center;
+        }
+        .menu-btn {
+            background: transparent; border: 2px solid var(--neon);
+            color: var(--neon); padding: 8px 18px; border-radius: 20px;
+            cursor: pointer; font-weight: bold; transition: 0.3s;
+        }
+        .menu-btn.active { background: var(--neon); color: #000; box-shadow: 0 0 20px var(--neon); }
+
+        /* Contenedor Principal */
+        #game-wrapper {
+            position: relative; width: 800px; height: 500px;
+            border-radius: 15px; overflow: hidden;
+            border: 2px solid rgba(0, 255, 242, 0.2);
+            max-width: 95vw; /* Adaptación para móvil */
+        }
+        canvas { display: block; cursor: none; width: 100%; height: 100%; }
+
+        /* Pantallas Superpuestas */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; background: rgba(2, 2, 5, 0.9);
+            z-index: 50; text-align: center;
+        }
+        .hide { display: none; }
+        
+        .title-card { font-size: 60px; color: var(--neon); text-transform: uppercase; letter-spacing: 5px; animation: glow 1s infinite alternate; margin: 0; }
+        .sub-text { font-size: 20px; color: #fff; margin-top: 10px; opacity: 0.8; }
+        
+        .btn-retry {
+            margin-top: 30px; background: var(--pink); border: none;
+            color: #fff; padding: 15px 40px; font-size: 20px;
+            border-radius: 50px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 0 20px var(--pink);
+        }
+
+        @keyframes glow { from { text-shadow: 0 0 10px var(--neon); } to { text-shadow: 0 0 30px var(--neon), 0 0 50px var(--neon); } }
+        
+        .hud {
+            position: absolute; top: 0; width: 100%; padding: 15px;
+            display: flex; justify-content: space-around; box-sizing: border-box;
+            background: rgba(0,0,0,0.4); pointer-events: none; z-index: 10;
+        }
+        #question { font-size: 38px; font-weight: bold; }
+
+        @media (max-width: 600px) {
+            .title-card { font-size: 35px; }
+            #game-wrapper { height: 70vh; }
+            .menu-btn { padding: 6px 12px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="menu">
+        <button id="btn-suma" class="menu-btn active" onclick="changeMode('suma')">MODO SUMA</button>
+        <button id="btn-resta" class="menu-btn" onclick="changeMode('resta')">MODO RESTA</button>
+        <button id="btn-multi" class="menu-btn" onclick="changeMode('multi')">MODO MULTI</button>
+        <button id="btn-div" class="menu-btn" onclick="changeMode('div')">MODO DIV</button>
+    </div>
+
+    <div id="game-wrapper">
+        <div class="hud">
+            <div style="color: var(--pink)">Vidas: <span id="lives">3</span></div>
+            <div id="question" style="color: #fff">--</div>
+            <div style="color: var(--neon)">Puntos: <span id="score">0</span></div>
+        </div>
+
+        <div id="start-screen" class="overlay">
+            <h1 id="mode-title" class="title-card">PREPÁRATE</h1>
+            <p class="sub-text">Iniciando secuencia de combate...</p>
+        </div>
+
+        <div id="over-screen" class="overlay hide">
+            <h1 style="color: var(--pink); font-size: 50px;">GAME OVER</h1>
+            <p id="final-msg" class="sub-text">¡Suerte para la próxima, guerrero!</p>
+            <button class="btn-retry" onclick="resetGame()">REINTENTAR</button>
+        </div>
+
+        <canvas id="canvas"></canvas>
+    </div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('game-wrapper');
+    
+    let mode = 'suma', score = 0, lives = 3, level = 1;
+    let gameState = 'START';
+    let targetResult = 0, enemies = [], bullets = [], mouse = { x: 400 };
+
+    // Ajuste dinámico de resolución
+    function resize() {
+        canvas.width = wrapper.clientWidth;
+        canvas.height = wrapper.clientHeight;
+        mouse.x = canvas.width / 2;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function changeMode(m) {
+        mode = m;
+        document.querySelectorAll('.menu-btn').forEach(b => b.classList.toggle('active', b.id.includes(m)));
+        showIntro();
+    }
+
+    function showIntro() {
+        gameState = 'START';
+        document.getElementById('start-screen').classList.remove('hide');
+        document.getElementById('over-screen').classList.add('hide');
+        document.getElementById('mode-title').innerText = "MODO " + mode.toUpperCase();
+        
+        setTimeout(() => {
+            document.getElementById('start-screen').classList.add('hide');
+            gameState = 'PLAYING';
+            resetStats();
+            spawn();
+        }, 2000);
+    }
+
+    function resetStats() {
+        score = 0; lives = 3; level = 1;
+        updateHUD();
+    }
+
+    function updateHUD() {
+        document.getElementById('score').innerText = score;
+        document.getElementById('lives').innerText = lives;
+    }
+
+    function resetGame() { showIntro(); }
+
+    function spawn() {
+        let a, b, sym, diff = 5 + (level * 2);
+        if(mode === 'suma') { a = r(diff)+2; b = r(diff)+2; targetResult = a+b; sym='+'; }
+        else if(mode === 'resta') { a = r(diff)+15; b = r(a-2)+1; targetResult = a-b; sym='-'; }
+        else if(mode === 'multi') { a = r(level+4)+2; b = r(9)+1; targetResult = a*b; sym='x'; }
+        else { b = r(8)+2; targetResult = r(9)+1; a = targetResult * b; sym='÷'; }
+
+        document.getElementById('question').innerText = `${a} ${sym} ${b}`;
+        enemies = [];
+        let correct = r(3); // 3 opciones en móvil es más cómodo
+        let step = canvas.width / 3;
+        for(let i=0; i<3; i++) {
+            let v = (i===correct) ? targetResult : targetResult + (r(12)-6);
+            if(v === targetResult && i!==correct) v += 3;
+            enemies.push({ x: (step/2)+(i*step), y: -60, val: v, ok: i===correct });
+        }
+    }
+
+    function r(n) { return Math.floor(Math.random() * n); }
+
+    // CONTROLES DUALES (MOUSE + TOUCH)
+    function handleInput(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        mouse.x = clientX - rect.left;
+        if(gameState === 'PLAYING' && e.type !== 'touchmove') {
+            bullets.push({x: mouse.x, y: canvas.height - 60});
+        }
+    }
+
+    canvas.addEventListener('mousemove', handleInput);
+    canvas.addEventListener('mousedown', handleInput);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); }, {passive: false});
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleInput(e); }, {passive: false});
+
+    function update() {
+        if(gameState !== 'PLAYING') return;
+
+        bullets.forEach((b, bi) => {
+            b.y -= 15;
+            if(b.y < 0) bullets.splice(bi, 1);
+            enemies.forEach((en, ei) => {
+                if(Math.hypot(b.x - en.x, b.y - en.y) < 45) {
+                    bullets.splice(bi, 1);
+                    if(en.ok) {
+                        score += 100; level += 0.2; updateHUD(); spawn();
+                    } else { handleDamage(); }
+                }
+            });
+        });
+
+        enemies.forEach(en => {
+            en.y += 1.5 + (level * 0.4);
+            if(en.y > canvas.height + 60) { handleDamage(); spawn(); }
+        });
+    }
+
+    function handleDamage() {
+        lives--; updateHUD();
+        if(lives <= 0) {
+            gameState = 'GAMEOVER';
+            document.getElementById('over-screen').classList.remove('hide');
+        }
+    }
+
+    function draw() {
+        ctx.fillStyle = '#020205'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        if(gameState === 'PLAYING') {
+            // Nave
+            ctx.shadowBlur = 15; ctx.shadowColor = "#fff";
+            ctx.fillStyle = '#fff'; ctx.beginPath();
+            ctx.moveTo(mouse.x, canvas.height-60); 
+            ctx.lineTo(mouse.x-18, canvas.height-30); 
+            ctx.lineTo(mouse.x+18, canvas.height-30); ctx.fill();
+
+            // Meteoritos
+            enemies.forEach(en => {
+                ctx.strokeStyle = varColor(); ctx.lineWidth = 3;
+                ctx.shadowBlur = 20; ctx.shadowColor = varColor();
+                ctx.beginPath(); ctx.arc(en.x, en.y, 42, 0, Math.PI*2); ctx.stroke();
+                ctx.shadowBlur = 0; ctx.fillStyle = "#fff"; ctx.font = "bold 24px Arial";
+                ctx.textAlign = "center"; ctx.fillText(en.val, en.x, en.y+8);
+            });
+
+            // Disparos
+            ctx.fillStyle = varColor();
+            bullets.forEach(b => ctx.fillRect(b.x-2, b.y, 4, 18));
+        }
+        ctx.shadowBlur = 0;
+    }
+
+    function varColor() { return mode === 'suma' ? '#00fff2' : mode === 'resta' ? '#ff0077' : mode === 'multi' ? '#bc13fe' : '#76ff03'; }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    loop();
+</script>
+</body>
+</html>
